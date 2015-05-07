@@ -18,9 +18,11 @@ DEFAULT_CONTAINER = 'nailgun'
 IDENTITY_FILE = None
 
 SSH_PASSWORD_CHECKED = False
+DEFAULT_IP = '10.20.0.2'
 
 VERBOSE = False
 
+SSH_PORT = '8101'
 
 class DockerError(Exception):
     pass
@@ -96,7 +98,7 @@ def ssh_command(*args):
 
     print_verbose("COMMAND: %r" % list(args))
 
-    commands = ['ssh', 'root@%s' % IP, '-i', IDENTITY_FILE, '-C'] + list(args)
+    commands = ['ssh', '-p', SSH_PORT, 'root@%s' % IP, '-i', IDENTITY_FILE, '-C'] + list(args)
 
     if not SSH_PASSWORD_CHECKED:
         # NOTE: test if key is added to .authorized_keys with
@@ -105,7 +107,7 @@ def ssh_command(*args):
 
         try:
             check_output([
-                'ssh', '-o', 'PasswordAuthentication=no', 'root@%s' % IP, 'echo 1'
+                'ssh', '-p', SSH_PORT, '-o', 'PasswordAuthentication=no', 'root@%s' % IP, 'echo 1'
             ], stderr=STDOUT)
         except CalledProcessError as e:
             if 'remote host identification has changed' in \
@@ -122,7 +124,7 @@ def ssh_command(*args):
 def ssh_command_interactive(*args):
     print_verbose("COMMAND: %r" % list(args))
 
-    commands = ['ssh', '-t', 'root@%s' % IP, '-i', IDENTITY_FILE]
+    commands = ['ssh', '-p', SSH_PORT, '-t', 'root@%s' % IP, '-i', IDENTITY_FILE]
 
     if args:
         commands.append('-C')
@@ -167,13 +169,13 @@ class Command(object):
 
     @property
     def base_rsync_args(self):
-        return ['-a', '-v', '-z', '-e', 'ssh']
+        return ['-avz', '-e', '"ssh -p {0}"'.format(SSH_PORT)]
 
     def base_scp(self, source, target):
         six.print_('SCP: %s --> %s' % (source, target))
 
         result = check_output(
-            ['scp', source, target]
+            ['scp', '-P', SSH_PORT, source, target]
         )
 
     def rsync_args(self):
@@ -316,7 +318,7 @@ class DockerCommand(Command):
         raise NotImplementedError('rsync-static method not implemented')
 
     def post_docker_rsync(self):
-        self.restart_container()
+        pass
 
     def restart_container(self):
         result = ssh_command('docker restart %s' % self.get_docker_id(get_exited=True))
@@ -344,7 +346,7 @@ Admin token is stored in /etc/fuel/astute.yaml on Fuel Main.
         """
 
     gemspec = 'astute.gemspec'
-    gemfile = 'astute-6.0.0.gem'
+    gemfile = 'astute-6.1.0.gem'
 
     def get_log_directory(self):
         return '/var/log/docker-logs/astute'
@@ -637,7 +639,7 @@ def add_global_arguments(parser):
     parser.add_argument(
         '--ip',
         help='Set Fuel ISO master IP address',
-        default='10.20.0.2',
+        default=DEFAULT_IP,
         type=str,
         nargs='?'
     )
